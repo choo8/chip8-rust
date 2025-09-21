@@ -1,6 +1,6 @@
 const MEMORY_SIZE: usize = 4096;
 const ROM_START_ADDRESS: usize = 0x200;
-const FONTSET_START_ADDRESS: usize = 0x50;
+pub const FONTSET_START_ADDRESS: usize = 0x50;
 
 const FONT_SET: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -55,5 +55,9 @@ impl Memory {
         let high_byte = self.ram[addr] as u16;
         let low_byte = self.ram[addr + 1] as u16;
         (high_byte << 8) | low_byte
+    }
+
+    pub fn write_byte(&mut self, address: u16, value: u8) {
+        self.ram[address as usize] = value;
     }
 }
