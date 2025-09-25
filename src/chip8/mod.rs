@@ -9,7 +9,7 @@ use display::Display;
 use instruction::Instruction;
 use keypad::Keypad;
 use memory::Memory;
-use register::{RegisterIndex, RegisterFile};
+use register::{RegisterFile, RegisterIndex};
 
 use crate::chip8::memory::FONTSET_START_ADDRESS;
 
@@ -69,7 +69,7 @@ impl Chip8 {
                 self.stack_pointer += 1;
                 self.program_counter = addr;
             }
-            Instruction::SkipEqual(x, kk, ) => {
+            Instruction::SkipEqual(x, kk) => {
                 if self.registers.get(x) == kk {
                     self.program_counter += 2;
                 }
@@ -79,7 +79,7 @@ impl Chip8 {
                     self.program_counter += 2;
                 }
             }
-            Instruction::SkipEqualRegister(x, y, ) => {
+            Instruction::SkipEqualRegister(x, y) => {
                 if self.registers.get(x) == self.registers.get(y) {
                     self.program_counter += 2;
                 }
@@ -91,7 +91,7 @@ impl Chip8 {
                 let current = self.registers.get(x);
                 self.registers.set(x, current.wrapping_add(kk));
             }
-            Instruction::LoadRegister(x, y, ) => {
+            Instruction::LoadRegister(x, y) => {
                 let value = self.registers.get(y);
                 self.registers.set(x, value);
             }
@@ -110,27 +110,40 @@ impl Chip8 {
             Instruction::LoadAdd(x, y) => {
                 let (result, carry) = self.registers.get(x).overflowing_add(self.registers.get(y));
                 self.registers.set(x, result);
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), if carry { 1 } else { 0 });
+                self.registers.set(
+                    RegisterIndex::try_from(0xF).unwrap(),
+                    if carry { 1 } else { 0 },
+                );
             }
             Instruction::LoadSub(x, y) => {
                 let (result, borrow) = self.registers.get(x).overflowing_sub(self.registers.get(y));
                 self.registers.set(x, result);
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), if borrow { 0 } else { 1 });
+                self.registers.set(
+                    RegisterIndex::try_from(0xF).unwrap(),
+                    if borrow { 0 } else { 1 },
+                );
             }
-            Instruction::LoadShiftRight(x) => {
+            Instruction::LoadShiftRight(x, y) => {
+                self.registers.set(x, self.registers.get(y));
                 let lsb = self.registers.get(x) & 0x1;
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), lsb);
                 self.registers.set(x, self.registers.get(x) >> 1);
+                self.registers
+                    .set(RegisterIndex::try_from(0xF).unwrap(), lsb);
             }
             Instruction::LoadSubNegative(x, y) => {
                 let (result, borrow) = self.registers.get(y).overflowing_sub(self.registers.get(x));
                 self.registers.set(x, result);
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), if borrow { 0 } else { 1 });
+                self.registers.set(
+                    RegisterIndex::try_from(0xF).unwrap(),
+                    if borrow { 0 } else { 1 },
+                );
             }
-            Instruction::LoadShiftLeft(x) => {
+            Instruction::LoadShiftLeft(x, y) => {
+                self.registers.set(x, self.registers.get(y));
                 let msb = (self.registers.get(x) & 0x80) >> 7;
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), msb);
                 self.registers.set(x, self.registers.get(x) << 1);
+                self.registers
+                    .set(RegisterIndex::try_from(0xF).unwrap(), msb);
             }
             Instruction::SkipNotEqualRegister(x, y) => {
                 if self.registers.get(x) != self.registers.get(y) {
@@ -209,20 +222,26 @@ impl Chip8 {
             }
             Instruction::LoadBinaryCodedDecimal(x) => {
                 let value = self.registers.get(x);
-                self.memory.write_byte(self.index_register, (value / 100) % 10);
-                self.memory.write_byte(self.index_register + 1, (value % 100) / 10);
+                self.memory
+                    .write_byte(self.index_register, (value / 100) % 10);
+                self.memory
+                    .write_byte(self.index_register + 1, (value % 100) / 10);
                 self.memory.write_byte(self.index_register + 2, value % 10);
             }
             Instruction::StoreRegisters(x) => {
                 for i in 0..=x.value() {
-                    let value = self.registers.get(RegisterIndex::try_from(i as u8).unwrap());
-                    self.memory.write_byte(self.index_register + i as u16, value);
+                    let value = self
+                        .registers
+                        .get(RegisterIndex::try_from(i as u8).unwrap());
+                    self.memory
+                        .write_byte(self.index_register + i as u16, value);
                 }
             }
             Instruction::LoadRegisters(x) => {
                 for i in 0..=x.value() {
                     let value = self.memory.read_byte(self.index_register + i as u16);
-                    self.registers.set(RegisterIndex::try_from(i as u8).unwrap(), value);
+                    self.registers
+                        .set(RegisterIndex::try_from(i as u8).unwrap(), value);
                 }
             }
         }

@@ -34,11 +34,11 @@ pub enum Instruction {
     // 8xy5 - SUB Vx, Vy
     LoadSub(RegisterIndex, RegisterIndex),
     // 8xy6 - SHR Vx
-    LoadShiftRight(RegisterIndex),
+    LoadShiftRight(RegisterIndex, RegisterIndex),
     // 8xy7 - SUBN Vx, Vy
     LoadSubNegative(RegisterIndex, RegisterIndex),
     // 8xyE - SHL Vx
-    LoadShiftLeft(RegisterIndex),
+    LoadShiftLeft(RegisterIndex, RegisterIndex),
     // 9xy0 - SNE Vx, Vy
     SkipNotEqualRegister(RegisterIndex, RegisterIndex),
     // Annn - LD I, addr
@@ -106,7 +106,10 @@ impl From<u16> for Instruction {
             0x5 => {
                 let x = ((raw_instruction & 0x0F00) >> 8) as u8;
                 let y = ((raw_instruction & 0x00F0) >> 4) as u8;
-                Instruction::SkipEqualRegister(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap())
+                Instruction::SkipEqualRegister(
+                    RegisterIndex::try_from(x).unwrap(),
+                    RegisterIndex::try_from(y).unwrap(),
+                )
             }
             0x6 => {
                 let x = ((raw_instruction & 0x0F00) >> 8) as u8;
@@ -123,22 +126,52 @@ impl From<u16> for Instruction {
                 let y = ((raw_instruction & 0x00F0) >> 4) as u8;
                 let subcode = raw_instruction & 0x000F;
                 match subcode {
-                    0x0 => Instruction::LoadRegister(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0x1 => Instruction::LoadOr(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0x2 => Instruction::LoadAnd(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0x3 => Instruction::LoadXor(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0x4 => Instruction::LoadAdd(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0x5 => Instruction::LoadSub(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0x6 => Instruction::LoadShiftRight(RegisterIndex::try_from(x).unwrap()),
-                    0x7 => Instruction::LoadSubNegative(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0xE => Instruction::LoadShiftLeft(RegisterIndex::try_from(x).unwrap()),
-                    _ => panic!("Unknown instruction: {:#X}", raw_instruction)
+                    0x0 => Instruction::LoadRegister(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0x1 => Instruction::LoadOr(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0x2 => Instruction::LoadAnd(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0x3 => Instruction::LoadXor(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0x4 => Instruction::LoadAdd(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0x5 => Instruction::LoadSub(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0x6 => Instruction::LoadShiftRight(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0x7 => Instruction::LoadSubNegative(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    0xE => Instruction::LoadShiftLeft(
+                        RegisterIndex::try_from(x).unwrap(),
+                        RegisterIndex::try_from(y).unwrap(),
+                    ),
+                    _ => panic!("Unknown instruction: {:#X}", raw_instruction),
                 }
             }
             0x9 => {
                 let x = ((raw_instruction & 0x0F00) >> 8) as u8;
                 let y = ((raw_instruction & 0x00F0) >> 4) as u8;
-                Instruction::SkipNotEqualRegister(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap())
+                Instruction::SkipNotEqualRegister(
+                    RegisterIndex::try_from(x).unwrap(),
+                    RegisterIndex::try_from(y).unwrap(),
+                )
             }
             0xA => {
                 let nnn = raw_instruction & 0x0FFF;
@@ -157,7 +190,11 @@ impl From<u16> for Instruction {
                 let x = ((raw_instruction & 0x0F00) >> 8) as u8;
                 let y = ((raw_instruction & 0x00F0) >> 4) as u8;
                 let n = (raw_instruction & 0x000F) as u8;
-                Instruction::Display(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap(), Nibble::try_from(n).unwrap())
+                Instruction::Display(
+                    RegisterIndex::try_from(x).unwrap(),
+                    RegisterIndex::try_from(y).unwrap(),
+                    Nibble::try_from(n).unwrap(),
+                )
             }
             0xE => {
                 let x = ((raw_instruction & 0x0F00) >> 8) as u8;
@@ -165,7 +202,7 @@ impl From<u16> for Instruction {
                 match subcode {
                     0x9E => Instruction::SkipKeyPress(RegisterIndex::try_from(x).unwrap()),
                     0xA1 => Instruction::SkipKeyNotPress(RegisterIndex::try_from(x).unwrap()),
-                    _ => panic!("Unknown instruction: {:#X}", raw_instruction)
+                    _ => panic!("Unknown instruction: {:#X}", raw_instruction),
                 }
             }
             0xF => {
@@ -178,10 +215,12 @@ impl From<u16> for Instruction {
                     0x18 => Instruction::StoreSoundTimer(RegisterIndex::try_from(x).unwrap()),
                     0x1E => Instruction::AddIndexRegister(RegisterIndex::try_from(x).unwrap()),
                     0x29 => Instruction::LoadFontCharacter(RegisterIndex::try_from(x).unwrap()),
-                    0x33 => Instruction::LoadBinaryCodedDecimal(RegisterIndex::try_from(x).unwrap()),
+                    0x33 => {
+                        Instruction::LoadBinaryCodedDecimal(RegisterIndex::try_from(x).unwrap())
+                    }
                     0x55 => Instruction::StoreRegisters(RegisterIndex::try_from(x).unwrap()),
                     0x65 => Instruction::LoadRegisters(RegisterIndex::try_from(x).unwrap()),
-                    _ => panic!("Unknown instruction: {:#X}", raw_instruction)
+                    _ => panic!("Unknown instruction: {:#X}", raw_instruction),
                 }
             }
             _ => panic!("Unknown instruction: {:#X}", raw_instruction),
