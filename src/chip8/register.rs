@@ -30,7 +30,9 @@ pub struct RegisterFile {
 
 impl RegisterFile {
     pub fn new() -> Self {
-        Self { registers: [0; NUM_REGISTERS] }
+        Self {
+            registers: [0; NUM_REGISTERS],
+        }
     }
 
     pub fn get(&self, reg: RegisterIndex) -> u8 {
