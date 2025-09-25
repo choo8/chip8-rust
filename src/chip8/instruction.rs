@@ -34,11 +34,11 @@ pub enum Instruction {
     // 8xy5 - SUB Vx, Vy
     LoadSub(RegisterIndex, RegisterIndex),
     // 8xy6 - SHR Vx
-    LoadShiftRight(RegisterIndex),
+    LoadShiftRight(RegisterIndex, RegisterIndex),
     // 8xy7 - SUBN Vx, Vy
     LoadSubNegative(RegisterIndex, RegisterIndex),
     // 8xyE - SHL Vx
-    LoadShiftLeft(RegisterIndex),
+    LoadShiftLeft(RegisterIndex, RegisterIndex),
     // 9xy0 - SNE Vx, Vy
     SkipNotEqualRegister(RegisterIndex, RegisterIndex),
     // Annn - LD I, addr
@@ -129,9 +129,9 @@ impl From<u16> for Instruction {
                     0x3 => Instruction::LoadXor(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
                     0x4 => Instruction::LoadAdd(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
                     0x5 => Instruction::LoadSub(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0x6 => Instruction::LoadShiftRight(RegisterIndex::try_from(x).unwrap()),
+                    0x6 => Instruction::LoadShiftRight(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
                     0x7 => Instruction::LoadSubNegative(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
-                    0xE => Instruction::LoadShiftLeft(RegisterIndex::try_from(x).unwrap()),
+                    0xE => Instruction::LoadShiftLeft(RegisterIndex::try_from(x).unwrap(), RegisterIndex::try_from(y).unwrap()),
                     _ => panic!("Unknown instruction: {:#X}", raw_instruction)
                 }
             }

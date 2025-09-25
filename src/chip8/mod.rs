@@ -117,20 +117,22 @@ impl Chip8 {
                 self.registers.set(x, result);
                 self.registers.set(RegisterIndex::try_from(0xF).unwrap(), if borrow { 0 } else { 1 });
             }
-            Instruction::LoadShiftRight(x) => {
+            Instruction::LoadShiftRight(x, y) => {
+                self.registers.set(x, self.registers.get(y));
                 let lsb = self.registers.get(x) & 0x1;
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), lsb);
                 self.registers.set(x, self.registers.get(x) >> 1);
+                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), lsb);
             }
             Instruction::LoadSubNegative(x, y) => {
                 let (result, borrow) = self.registers.get(y).overflowing_sub(self.registers.get(x));
                 self.registers.set(x, result);
                 self.registers.set(RegisterIndex::try_from(0xF).unwrap(), if borrow { 0 } else { 1 });
             }
-            Instruction::LoadShiftLeft(x) => {
+            Instruction::LoadShiftLeft(x, y) => {
+                self.registers.set(x, self.registers.get(y));
                 let msb = (self.registers.get(x) & 0x80) >> 7;
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), msb);
                 self.registers.set(x, self.registers.get(x) << 1);
+                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), msb);
             }
             Instruction::SkipNotEqualRegister(x, y) => {
                 if self.registers.get(x) != self.registers.get(y) {
