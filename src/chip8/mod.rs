@@ -1,4 +1,4 @@
-mod display;
+pub mod display;
 mod instruction;
 mod keypad;
 mod memory;
@@ -23,7 +23,8 @@ pub struct Chip8 {
     delay_timer: u8,
     sound_timer: u8,
     pub display: Display,
-    keypad: Keypad,
+    pub keypad: Keypad,
+    waiting_for_key: Option<RegisterIndex>,
 }
 
 impl Chip8 {
@@ -39,7 +40,12 @@ impl Chip8 {
             sound_timer: 0,
             display: Display::new(),
             keypad: Keypad::new(),
+            waiting_for_key: None,
         }
+    }
+
+    pub fn is_waiting_for_key(&self) -> bool {
+        self.waiting_for_key.is_some()
     }
 
     pub fn load_rom(&mut self, rom_data: &[u8]) {
@@ -47,12 +53,14 @@ impl Chip8 {
     }
 
     pub fn emulate_cycle(&mut self) {
+        // Fetch
         let raw_instruction = self.memory.read_instruction(self.program_counter);
-
-        self.program_counter += 2;
-
         let instruction = Instruction::from(raw_instruction);
 
+        // Increment PC
+        self.program_counter += 2;
+
+        // Decode & Execute
         match instruction {
             Instruction::Clear => {
                 self.display.clear();
@@ -198,11 +206,7 @@ impl Chip8 {
                 self.registers.set(x, value);
             }
             Instruction::LoadKeyPress(x) => {
-                if let Some(key) = self.keypad.get_pressed_key() {
-                    self.registers.set(x, key);
-                } else {
-                    self.program_counter -= 2; // Repeat this instruction
-                }
+                self.waiting_for_key = Some(x);
             }
             Instruction::StoreDelayTimer(x) => {
                 let value = self.registers.get(x);
@@ -245,17 +249,21 @@ impl Chip8 {
                 }
             }
         }
-    }
 
-    pub fn update_timers(&mut self) {
+        // Update Timers
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
         }
+
         if self.sound_timer > 0 {
             self.sound_timer -= 1;
-            if self.sound_timer == 0 {
-                // Beep sound
-            }
+        }
+    }
+
+    pub fn resolve_key_wait(&mut self, key: u8) {
+        if let Some(x) = self.waiting_for_key.take() {
+            self.registers.set(x, key);
+            self.keypad.set_key_pressed(key, true);
         }
     }
 }

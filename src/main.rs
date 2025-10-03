@@ -1,169 +1,157 @@
+extern crate sdl2;
+
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+
 use std::{
-    env, fs, io,
+    env, fs,
     time::{Duration, Instant},
 };
 
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
-    execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-};
-use ratatui::{
-    Frame, Terminal,
-    backend::{Backend, CrosstermBackend},
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, Paragraph},
-};
-
 use chip8_rust::chip8::Chip8;
+use chip8_rust::chip8::display::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
+
+const SCALE_FACTOR: u32 = 10; // Increase this for a larger window
+const WINDOW_WIDTH: u32 = DISPLAY_WIDTH as u32 * SCALE_FACTOR;
+const WINDOW_HEIGHT: u32 = DISPLAY_HEIGHT as u32 * SCALE_FACTOR;
 
 const CYCLES_PER_SECOND: u32 = 540;
 const TARGET_FPS: u64 = 60;
 const MICROSECONDS_PER_FRAME: u64 = 1_000_000 / TARGET_FPS;
 
-fn main() -> io::Result<()> {
+fn main() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         eprintln!("Usage: {} <rom_file>", args[0]);
         std::process::exit(1);
     }
     let rom_path = &args[1];
-    let rom_data = fs::read(rom_path)?;
+    let rom_data = fs::read(rom_path).expect("Failed to read ROM file");
 
     let mut chip8 = Chip8::new();
     chip8.load_rom(&rom_data);
 
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
+
+    let window = video_subsystem
+        .window("CHIP-8 Emulator", WINDOW_WIDTH, WINDOW_HEIGHT)
+        .position_centered()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+    let mut event_pump = sdl_context.event_pump()?;
 
     let cycles_per_frame = CYCLES_PER_SECOND / TARGET_FPS as u32;
     let mut last_frame_time = Instant::now();
 
-    loop {
-        let elaspsed = last_frame_time.elapsed();
-        if elaspsed < Duration::from_micros(MICROSECONDS_PER_FRAME) {
-            std::thread::sleep(Duration::from_micros(MICROSECONDS_PER_FRAME) - elaspsed);
-        }
-        last_frame_time = Instant::now();
-
-        if event::poll(Duration::from_millis(0))? {
-            if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
-                    break; // Exit loop
+    'running: loop {
+        // --- Event Handling ---
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    break 'running;
                 }
-                // TODO: Implement keyboard mapping to chip8.keyboard
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(chip8_key) = map_key(keycode) {
+                        if chip8.is_waiting_for_key() {
+                            chip8.resolve_key_wait(chip8_key);
+                        } else {
+                            chip8.keypad.set_key_pressed(chip8_key, true);
+                        }
+                    }
+                }
+                Event::KeyUp { keycode, .. } => {
+                    if let Some(chip8_key) = map_key(keycode) {
+                        chip8.keypad.set_key_pressed(chip8_key, false);
+                    }
+                }
+                _ => {}
             }
         }
 
-        for _ in 0..cycles_per_frame {
-            chip8.emulate_cycle();
+        // --- Frame Rate Control ---
+        let elapsed = last_frame_time.elapsed();
+        if elapsed < Duration::from_micros(MICROSECONDS_PER_FRAME) {
+            std::thread::sleep(Duration::from_micros(MICROSECONDS_PER_FRAME) - elapsed);
+        }
+        last_frame_time = Instant::now();
+
+        // --- CPU Emulation ---
+        if !chip8.is_waiting_for_key() {
+            for _ in 0..cycles_per_frame {
+                chip8.emulate_cycle();
+            }
         }
 
-        chip8.update_timers();
-
-        terminal.draw(|f| ui(f, &chip8))?;
+        // --- Drawing ---
+        draw_screen(&chip8, &mut canvas)?;
     }
-
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
 
     Ok(())
 }
 
-fn ui(f: &mut Frame, chip8: &Chip8) {
-    // CHIP-8 display is 64x32
-    let display_width = 64;
-    let display_height = 32;
-
-    // Get the terminal size
-    let term_area = f.area();
-
-    // Center the display and clamp to terminal bounds
-    let area = Rect {
-        x: term_area.x + (term_area.width.saturating_sub(display_width as u16 + 2)) / 2,
-        y: term_area.y + (term_area.height.saturating_sub(display_height as u16 + 2)) / 2,
-        width: display_width as u16 + 2,
-        height: display_height as u16 + 2,
-    };
-
-    if term_area.width < display_width as u16 + 2 || term_area.height < display_height as u16 + 2 {
-        let message = Paragraph::new("Terminal too small!\nPlease resize to at least 64x32.")
-            .alignment(Alignment::Center);
-        // Center the message in the available space
-        let area = centered_rect(50, 50, term_area);
-        f.render_widget(message, area);
-        return; // Stop rendering the main UI
-    }
-
+fn draw_screen(
+    chip8: &Chip8,
+    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+) -> Result<(), String> {
     let display_buffer = chip8.display.get_buffer();
-    let mut display_text = String::new();
 
-    for row in display_buffer {
-        for &pixel in row {
+    // Clear the screen with a background color
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+
+    // Set the drawing color for the "on" pixels
+    canvas.set_draw_color(Color::RGB(0, 255, 0));
+
+    // Iterate through the CHIP-8 buffer and draw rectangles for each "on" pixel
+    for (y, row) in display_buffer.iter().enumerate() {
+        for (x, &pixel) in row.iter().enumerate() {
             if pixel {
-                display_text.push('█');
-            } else {
-                display_text.push(' ');
+                let rect = Rect::new(
+                    (x as u32 * SCALE_FACTOR) as i32,
+                    (y as u32 * SCALE_FACTOR) as i32,
+                    SCALE_FACTOR,
+                    SCALE_FACTOR,
+                );
+                canvas.fill_rect(rect)?;
             }
         }
-        display_text.push('\n');
     }
 
-    let display = Paragraph::new(display_text)
-        .style(Style::default().fg(Color::Green))
-        .block(
-            Block::default()
-                .title("CHIP-8 Display")
-                .borders(Borders::ALL),
-        );
-
-    f.render_widget(display, area);
+    canvas.present();
+    Ok(())
 }
 
-/// Helper function to create a centered rect inside an area
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
+fn map_key(keycode: Option<Keycode>) -> Option<u8> {
+    match keycode {
+        Some(Keycode::Num1) => Some(0x1),
+        Some(Keycode::Num2) => Some(0x2),
+        Some(Keycode::Num3) => Some(0x3),
+        Some(Keycode::Num4) => Some(0xC),
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
+        Some(Keycode::Q) => Some(0x4),
+        Some(Keycode::W) => Some(0x5),
+        Some(Keycode::E) => Some(0x6),
+        Some(Keycode::R) => Some(0xD),
 
-fn map_key(key_code: KeyCode) -> Option<u8> {
-    match key_code {
-        KeyCode::Char('1') => Some(0x1),
-        KeyCode::Char('2') => Some(0x2),
-        KeyCode::Char('3') => Some(0x3),
-        KeyCode::Char('4') => Some(0xC),
-        KeyCode::Char('q') => Some(0x4),
-        KeyCode::Char('w') => Some(0x5),
-        KeyCode::Char('e') => Some(0x6),
-        KeyCode::Char('r') => Some(0xD),
-        KeyCode::Char('a') => Some(0x7),
-        KeyCode::Char('s') => Some(0x8),
-        KeyCode::Char('d') => Some(0x9),
-        KeyCode::Char('f') => Some(0xE),
-        KeyCode::Char('z') => Some(0xA),
-        KeyCode::Char('x') => Some(0x0),
-        KeyCode::Char('c') => Some(0xB),
-        KeyCode::Char('v') => Some(0xF),
-        _ => None,
+        Some(Keycode::A) => Some(0x7),
+        Some(Keycode::S) => Some(0x8),
+        Some(Keycode::D) => Some(0x9),
+        Some(Keycode::F) => Some(0xE),
+
+        Some(Keycode::Z) => Some(0xA),
+        Some(Keycode::X) => Some(0x0),
+        Some(Keycode::C) => Some(0xB),
+        Some(Keycode::V) => Some(0xF),
+
+        _ => None, // Any other key is not mapped
     }
 }
