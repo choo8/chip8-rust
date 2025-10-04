@@ -106,14 +106,17 @@ impl Chip8 {
             Instruction::LoadOr(x, y) => {
                 let value = self.registers.get(x) | self.registers.get(y);
                 self.registers.set(x, value);
+                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 0);
             }
             Instruction::LoadAnd(x, y) => {
                 let value = self.registers.get(x) & self.registers.get(y);
                 self.registers.set(x, value);
+                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 0);
             }
             Instruction::LoadXor(x, y) => {
                 let value = self.registers.get(x) ^ self.registers.get(y);
                 self.registers.set(x, value);
+                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 0);
             }
             Instruction::LoadAdd(x, y) => {
                 let (result, carry) = self.registers.get(x).overflowing_add(self.registers.get(y));
