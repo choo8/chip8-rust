@@ -241,14 +241,17 @@ impl Chip8 {
                         .registers
                         .get(RegisterIndex::try_from(i as u8).unwrap());
                     self.memory
-                        .write_byte(self.index_register + i as u16, value);
+                        .write_byte(self.index_register, value);
+                    self.index_register += 1;
+
                 }
             }
             Instruction::LoadRegisters(x) => {
                 for i in 0..=x.value() {
-                    let value = self.memory.read_byte(self.index_register + i as u16);
+                    let value = self.memory.read_byte(self.index_register);
                     self.registers
                         .set(RegisterIndex::try_from(i as u8).unwrap(), value);
+                    self.index_register += 1;
                 }
             }
         }
