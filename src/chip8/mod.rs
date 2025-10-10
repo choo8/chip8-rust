@@ -173,8 +173,8 @@ impl Chip8 {
                 self.registers.set(x, random_byte & kk);
             }
             Instruction::Display(x, y, nibble) => {
-                let x = self.registers.get(x) as usize;
-                let y = self.registers.get(y) as usize;
+                let x = self.registers.get(x) as usize % 64;
+                let y = self.registers.get(y) as usize % 32;
                 let height = nibble.value() as usize;
 
                 self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 0);
@@ -183,10 +183,12 @@ impl Chip8 {
                     let sprite_byte = self.memory.read_byte(self.index_register + row as u16);
                     for col in 0..8 {
                         if (sprite_byte & (0x80 >> col)) != 0 {
-                            let pixel_x = (x + col) % 64;
-                            let pixel_y = (y + row) % 32;
-                            if self.display.toggle_pixel(pixel_x, pixel_y) {
-                                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 1);
+                            let pixel_x = x + col;
+                            let pixel_y = y + row;
+                            if pixel_x < 64 && pixel_y < 32 {
+                                if self.display.toggle_pixel(pixel_x, pixel_y) {
+                                    self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 1);
+                                }
                             }
                         }
                     }
@@ -240,10 +242,8 @@ impl Chip8 {
                     let value = self
                         .registers
                         .get(RegisterIndex::try_from(i as u8).unwrap());
-                    self.memory
-                        .write_byte(self.index_register, value);
+                    self.memory.write_byte(self.index_register, value);
                     self.index_register += 1;
-
                 }
             }
             Instruction::LoadRegisters(x) => {
