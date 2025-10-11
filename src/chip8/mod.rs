@@ -2,7 +2,7 @@ pub mod display;
 mod instruction;
 mod keypad;
 mod memory;
-mod register;
+pub mod register;
 mod types;
 
 use display::Display;
@@ -20,11 +20,12 @@ pub struct Chip8 {
     program_counter: u16,
     stack: [u16; 16],
     stack_pointer: u8,
-    delay_timer: u8,
-    sound_timer: u8,
+    pub delay_timer: u8,
+    pub sound_timer: u8,
     pub display: Display,
     pub keypad: Keypad,
     waiting_for_key: Option<RegisterIndex>,
+    waiting_for_release: bool,
 }
 
 impl Chip8 {
@@ -41,6 +42,7 @@ impl Chip8 {
             display: Display::new(),
             keypad: Keypad::new(),
             waiting_for_key: None,
+            waiting_for_release: false,
         }
     }
 
@@ -48,11 +50,15 @@ impl Chip8 {
         self.waiting_for_key.is_some()
     }
 
+    pub fn is_waiting_for_release(&self) -> bool {
+        self.waiting_for_release
+    }
+
     pub fn load_rom(&mut self, rom_data: &[u8]) {
         self.memory.load_rom(rom_data);
     }
 
-    pub fn emulate_cycle(&mut self) {
+    pub fn emulate_cycle(&mut self, first_cycle_of_frame: bool) {
         // Fetch
         let raw_instruction = self.memory.read_instruction(self.program_counter);
         let instruction = Instruction::from(raw_instruction);
@@ -173,21 +179,28 @@ impl Chip8 {
                 self.registers.set(x, random_byte & kk);
             }
             Instruction::Display(x, y, nibble) => {
-                let x = self.registers.get(x) as usize % 64;
-                let y = self.registers.get(y) as usize % 32;
-                let height = nibble.value() as usize;
+                if !first_cycle_of_frame {
+                    // To prevent multiple draw instructions in a single frame from
+                    // interfering with each other, we skip all but the first one.
+                    self.program_counter -= 2;
+                } else {
+                    let x = self.registers.get(x) as usize % 64;
+                    let y = self.registers.get(y) as usize % 32;
+                    let height = nibble.value() as usize;
 
-                self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 0);
+                    self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 0);
 
-                for row in 0..height {
-                    let sprite_byte = self.memory.read_byte(self.index_register + row as u16);
-                    for col in 0..8 {
-                        if (sprite_byte & (0x80 >> col)) != 0 {
-                            let pixel_x = x + col;
-                            let pixel_y = y + row;
-                            if pixel_x < 64 && pixel_y < 32 {
-                                if self.display.toggle_pixel(pixel_x, pixel_y) {
-                                    self.registers.set(RegisterIndex::try_from(0xF).unwrap(), 1);
+                    for row in 0..height {
+                        let sprite_byte = self.memory.read_byte(self.index_register + row as u16);
+                        for col in 0..8 {
+                            if (sprite_byte & (0x80 >> col)) != 0 {
+                                let pixel_x = x + col;
+                                let pixel_y = y + row;
+                                if pixel_x < 64 && pixel_y < 32 {
+                                    if self.display.toggle_pixel(pixel_x, pixel_y) {
+                                        self.registers
+                                            .set(RegisterIndex::try_from(0xF).unwrap(), 1);
+                                    }
                                 }
                             }
                         }
@@ -212,6 +225,7 @@ impl Chip8 {
             }
             Instruction::LoadKeyPress(x) => {
                 self.waiting_for_key = Some(x);
+                self.waiting_for_release = true;
             }
             Instruction::StoreDelayTimer(x) => {
                 let value = self.registers.get(x);
@@ -255,15 +269,6 @@ impl Chip8 {
                 }
             }
         }
-
-        // Update Timers
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
-        }
-
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
     }
 
     pub fn resolve_key_wait(&mut self, key: u8) {
@@ -271,5 +276,9 @@ impl Chip8 {
             self.registers.set(x, key);
             self.keypad.set_key_pressed(key, true);
         }
+    }
+
+    pub fn resolve_key_release(&mut self) {
+        self.waiting_for_release = false;
     }
 }
