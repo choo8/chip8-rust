@@ -1,6 +1,6 @@
 pub const NUM_REGISTERS: usize = 16;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RegisterIndex(u8);
 
 #[derive(Debug)]

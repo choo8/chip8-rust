@@ -17,7 +17,7 @@ const SCALE_FACTOR: u32 = 10; // Increase this for a larger window
 const WINDOW_WIDTH: u32 = DISPLAY_WIDTH as u32 * SCALE_FACTOR;
 const WINDOW_HEIGHT: u32 = DISPLAY_HEIGHT as u32 * SCALE_FACTOR;
 
-const CYCLES_PER_SECOND: u32 = 540;
+const CYCLES_PER_SECOND: u32 = 5400;
 const TARGET_FPS: u64 = 60;
 const MICROSECONDS_PER_FRAME: u64 = 1_000_000 / TARGET_FPS;
 
@@ -70,6 +70,9 @@ fn main() -> Result<(), String> {
                 }
                 Event::KeyUp { keycode, .. } => {
                     if let Some(chip8_key) = map_key(keycode) {
+                        if !chip8.is_waiting_for_key() && chip8.is_waiting_for_release() {
+                            chip8.resolve_key_release();
+                        }
                         chip8.keypad.set_key_pressed(chip8_key, false);
                     }
                 }
@@ -85,10 +88,22 @@ fn main() -> Result<(), String> {
         last_frame_time = Instant::now();
 
         // --- CPU Emulation ---
-        if !chip8.is_waiting_for_key() {
-            for _ in 0..cycles_per_frame {
-                chip8.emulate_cycle();
+        if !chip8.is_waiting_for_key() && !chip8.is_waiting_for_release() {
+            for cycle_idx in 0..cycles_per_frame {
+                chip8.emulate_cycle(cycle_idx == 0);
+                if chip8.is_waiting_for_key() {
+                    break;
+                }
             }
+        }
+
+        // Update Timers
+        if chip8.delay_timer > 0 {
+            chip8.delay_timer -= 1;
+        }
+
+        if chip8.sound_timer > 0 {
+            chip8.sound_timer -= 1;
         }
 
         // --- Drawing ---
